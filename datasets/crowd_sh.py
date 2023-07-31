@@ -26,7 +26,7 @@ def cal_innner_area(c_left, c_up, c_right, c_down, bbox):
     return inner_area
 
 
-class Crowd(data.Dataset):
+class Crowd_sh(data.Dataset):
     def __init__(self, root_path, crop_size,
                  downsample_ratio, is_gray=False,
                  method='train'):
@@ -57,7 +57,8 @@ class Crowd(data.Dataset):
 
     def __getitem__(self, item):
         img_path = self.im_list[item]
-        gd_path = img_path.replace('jpg', 'npy')
+        name = os.path.splitext(os.path.basename(img_path))[0]
+        gd_path = os.path.join(self.root_path, name + '.npy')
         img = Image.open(img_path).convert('RGB')
         if self.method == 'train':
             keypoints = np.load(gd_path)
@@ -65,13 +66,20 @@ class Crowd(data.Dataset):
         elif self.method == 'val':
             keypoints = np.load(gd_path)
             img = self.trans(img)
-            name = os.path.splitext(os.path.basename(img_path))[0]
             return img, len(keypoints), name
 
     def train_transform(self, img, keypoints):
         """random crop image patch and find people in it"""
         wd, ht = img.size
         st_size = min(wd, ht)
+        # resize the image to fit the crop size
+        if st_size < self.c_size:
+            rr = 1.0 * self.c_size / st_size
+            wd = round(wd * rr)
+            ht = round(ht * rr)
+            st_size = 1.0 * min(wd, ht)
+            img = img.resize((wd, ht), Image.BICUBIC)
+            keypoints = keypoints * rr
         assert st_size >= self.c_size
         assert len(keypoints) > 0
         i, j, h, w = random_crop(ht, wd, self.c_size, self.c_size)

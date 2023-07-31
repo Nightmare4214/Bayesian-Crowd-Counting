@@ -10,11 +10,14 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import wandb
 
 from datasets.crowd import Crowd
+from datasets.crowd_sh import Crowd_sh
 from losses.bay_loss import Bay_Loss
 from losses.post_prob import Post_Prob
 from models.vgg import vgg19
+from test import do_test, get_dataloader_by_args
 from utils.helper import Save_Handle
 from utils.trainer import Trainer
 
@@ -32,6 +35,15 @@ class RegTrainer(Trainer):
     def setup(self):
         """initial the datasets, model, loss and optimizer"""
         args = self.args
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project="Bayesian-Counting",
+            name = os.path.basename(self.args.save_dir),
+            # track hyperparameters and run metadata
+            config=args,
+            # resume=True,
+            # sync_tensorboard=True
+        )
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
             self.device_count = torch.cuda.device_count()
@@ -42,10 +54,20 @@ class RegTrainer(Trainer):
             raise Exception("gpu is not available")
 
         self.downsample_ratio = args.downsample_ratio
-        self.datasets = {x: Crowd(os.path.join(args.data_dir, x),
-                                  args.crop_size,
-                                  args.downsample_ratio,
-                                  args.is_gray, x) for x in ['train', 'val']}
+        if args.dataset == 'qnrf':
+            self.datasets = {x: Crowd(os.path.join(args.data_dir, x),
+                                      args.crop_size,
+                                      args.downsample_ratio,
+                                      args.is_gray, x
+                                      ) for x in ['train', 'val']}
+        elif args.dataset in ['sha', 'shb']:
+            self.datasets = {x: Crowd_sh(os.path.join(args.data_dir, x),
+                                         args.crop_size,
+                                         args.downsample_ratio,
+                                         args.is_gray, x
+                                         ) for x in ['train', 'val']}
+        else:
+            raise NotImplementedError
         self.dataloaders = {x: DataLoader(self.datasets[x],
                                           collate_fn=(train_collate
                                                       if x == 'train' else default_collate),
@@ -76,7 +98,7 @@ class RegTrainer(Trainer):
                                    args.use_background,
                                    self.device)
         self.criterion = Bay_Loss(args.use_background, self.device)
-        self.log_dir = os.path.join(args.save_dir, 'runs')
+        self.log_dir = os.path.join(self.save_dir, 'runs')
         self.writer = SummaryWriter(self.log_dir)
         self.save_list = Save_Handle(max_num=args.max_model_num)
         self.best_mae = np.inf
@@ -92,6 +114,7 @@ class RegTrainer(Trainer):
             self.train_eopch()
             if epoch % args.val_epoch == 0 and epoch >= args.val_start:
                 self.val_epoch()
+        self.val_epoch()
 
     def train_eopch(self):
         epoch_loss = AverageMeter()
@@ -122,10 +145,14 @@ class RegTrainer(Trainer):
             epoch_loss.update(loss.item(), N)
             epoch_mse.update(np.mean(res * res), N)
             epoch_mae.update(np.mean(abs(res)), N)
-
-        self.writer.add_scalar('train/loss', epoch_loss.avg, self.epoch)
-        self.writer.add_scalar('train/mae', epoch_mae.avg, self.epoch)
-        self.writer.add_scalar('train/mse', np.sqrt(epoch_mse.avg), self.epoch)
+        wandb.log({
+            'train/loss': epoch_loss.avg,
+            'train/mae': epoch_mae.avg,
+            'train/mse': np.sqrt(epoch_mse.avg),
+        }, step=self.epoch)
+        # self.writer.add_scalar('train/loss', epoch_loss.avg, self.epoch)
+        # self.writer.add_scalar('train/mae', epoch_mae.avg, self.epoch)
+        # self.writer.add_scalar('train/mse', np.sqrt(epoch_mse.avg), self.epoch)
         logging.info('Epoch {} Train, Loss: {:.2f}, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_loss.avg, np.sqrt(epoch_mse.avg), epoch_mae.avg,
                              time.time() - epoch_start))
@@ -143,11 +170,11 @@ class RegTrainer(Trainer):
         self.model.eval()  # Set model to evaluate mode
         epoch_res = []
         # Iterate over data.
-        for inputs, count, name in tqdm(self.dataloaders['val']):
-            inputs = inputs.to(self.device)
-            # inputs are images with different sizes
-            assert inputs.size(0) == 1, 'the batch size should equal to 1 in validation mode'
-            with torch.set_grad_enabled(False):
+        with torch.no_grad():
+            for inputs, count, name in tqdm(self.dataloaders['val']):
+                inputs = inputs.to(self.device)
+                # inputs are images with different sizes
+                assert inputs.size(0) == 1, 'the batch size should equal to 1 in validation mode'
                 outputs = self.model(inputs)
                 res = count[0].item() - torch.sum(outputs).item()
                 epoch_res.append(res)
@@ -157,6 +184,12 @@ class RegTrainer(Trainer):
         mae = np.mean(np.abs(epoch_res))
         logging.info('Epoch {} Val, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
                      .format(self.epoch, mse, mae, time.time() - epoch_start))
+        wandb.log({
+            'val/mae': mae,
+            'val/mse': mse,
+        }, step=self.epoch)
+        # self.writer.add_scalar('val/mae', mae, self.epoch)
+        # self.writer.add_scalar('val/mse', mse, self.epoch)
 
         model_state_dic = self.model.state_dict()
         if (2.0 * mse + mae) < (2.0 * self.best_mse + self.best_mae):
@@ -166,3 +199,10 @@ class RegTrainer(Trainer):
                                                                                  self.best_mae,
                                                                                  self.epoch))
             torch.save(model_state_dic, os.path.join(self.save_dir, 'best_model.pth'))
+    
+    def test(self):
+        dataloader = get_dataloader_by_args(self.args)
+        self.model.load_state_dict(torch.load(os.path.join(self.args.save_dir, 'best_model.pth'), self.device))
+        mae, mse = do_test(self.model, self.device, dataloader, self.args.data_dir, self.args.save_dir, locate=True)
+        wandb.summary['test_mae'] = mae
+        wandb.summary['test_mse'] = mse

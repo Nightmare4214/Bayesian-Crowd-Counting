@@ -12,9 +12,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train ')
     parser.add_argument('--data_dir', default='/home/icml007/Nightmare4214/datasets/UCF-Train-Val-Test',
                         help='training data directory')
-    parser.add_argument('--save_dir', default='/home/icml007/Nightmare4214/PyTorch_model/bayesian',
+    parser.add_argument('--save_dir', default='/home/icml007/Nightmare4214/PyTorch_model/Bayesian',
                         help='directory to save models.')
-
+    parser.add_argument('--dataset', default='qnrf', help='dataset name: qnrf, nwpu, sha, shb')
     parser.add_argument('--lr', type=float, default=1e-5,
                         help='the initial learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4,
@@ -50,6 +50,17 @@ def parse_args():
     parser.add_argument('--background_ratio', type=float, default=1.0,
                         help='background ratio')
     args = parser.parse_args()
+    if args.dataset.lower() == 'qnrf':
+        args.crop_size = 512
+    elif args.dataset.lower() == 'nwpu':
+        args.crop_size = 384
+        args.val_epoch = 50
+    elif args.dataset.lower() == 'sha':
+        args.crop_size = 256
+    elif args.dataset.lower() == 'shb':
+        args.crop_size = 512
+    else:
+        raise NotImplementedError
     return args
 
 
@@ -60,3 +71,4 @@ if __name__ == '__main__':
     trainer = RegTrainer(args)
     trainer.setup()
     trainer.train()
+    trainer.test()
