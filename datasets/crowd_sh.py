@@ -22,9 +22,8 @@ def cal_innner_area(c_left, c_up, c_right, c_down, bbox):
     inner_up = np.maximum(c_up, bbox[:, 1])
     inner_right = np.minimum(c_right, bbox[:, 2])
     inner_down = np.minimum(c_down, bbox[:, 3])
-    inner_area = np.maximum(inner_right-inner_left, 0.0) * np.maximum(inner_down-inner_up, 0.0)
+    inner_area = np.maximum(inner_right - inner_left, 0.0) * np.maximum(inner_down - inner_up, 0.0)
     return inner_area
-
 
 
 class Crowd(data.Dataset):
@@ -66,7 +65,7 @@ class Crowd(data.Dataset):
         elif self.method == 'val':
             keypoints = np.load(gd_path)
             img = self.trans(img)
-            name = os.path.basename(img_path).split('.')[0]
+            name = os.path.splitext(os.path.basename(img_path))[0]
             return img, len(keypoints), name
 
     def train_transform(self, img, keypoints):
@@ -78,11 +77,11 @@ class Crowd(data.Dataset):
         i, j, h, w = random_crop(ht, wd, self.c_size, self.c_size)
         img = F.crop(img, i, j, h, w)
 
-        nearest_dis = np.clip(0.8*keypoints[:, 2], 4.0, 40.0)
+        nearest_dis = np.clip(0.8 * keypoints[:, 2], 4.0, 40.0)
         points_left_up = keypoints[:, :2] - nearest_dis[:, None] / 2.0
         points_right_down = keypoints[:, :2] + nearest_dis[:, None] / 2.0
         bbox = np.concatenate((points_left_up, points_right_down), axis=1)
-        inner_area = cal_innner_area(j, i, j+w, i+h, bbox)
+        inner_area = cal_innner_area(j, i, j + w, i + h, bbox)
         origin_area = nearest_dis * nearest_dis
         ratio = np.clip(1.0 * inner_area / origin_area, 0.0, 1.0)
         mask = (ratio >= 0.5)
@@ -98,4 +97,4 @@ class Crowd(data.Dataset):
             if random.random() > 0.5:
                 img = F.hflip(img)
         return self.trans(img), torch.from_numpy(keypoints.copy()).float(), \
-               torch.from_numpy(target.copy()).float(), st_size
+            torch.from_numpy(target.copy()).float(), st_size

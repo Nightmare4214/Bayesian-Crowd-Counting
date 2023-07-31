@@ -1,6 +1,7 @@
 import torch
 from torch.nn import Module
 
+
 class Post_Prob(Module):
     def __init__(self, sigma, c_size, stride, background_ratio, use_background, device):
         super(Post_Prob, self).__init__()
@@ -48,5 +49,3 @@ class Post_Prob(Module):
             for _ in range(len(points)):
                 prob_list.append(None)
         return prob_list
-
-

@@ -1,0 +1,6 @@
+pillow
+tqdm
+opencv-python==4.3.0.38
+scipy
+timm
+

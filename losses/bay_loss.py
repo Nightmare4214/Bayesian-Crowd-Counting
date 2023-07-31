@@ -1,5 +1,6 @@
-from torch.nn.modules import Module
 import torch
+from torch.nn.modules import Module
+
 
 class Bay_Loss(Module):
     def __init__(self, use_background, device):
@@ -25,6 +26,3 @@ class Bay_Loss(Module):
             loss += torch.sum(torch.abs(target - pre_count))
         loss = loss / len(prob_list)
         return loss
-
-
-

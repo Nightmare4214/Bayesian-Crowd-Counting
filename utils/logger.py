@@ -1,5 +1,6 @@
 import logging
 
+
 def setlogger(path):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -13,4 +14,3 @@ def setlogger(path):
     consoleHandler = logging.StreamHandler()
     consoleHandler.setFormatter(logFormatter)
     logger.addHandler(consoleHandler)
-

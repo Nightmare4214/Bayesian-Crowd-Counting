@@ -1,19 +1,22 @@
-from utils.trainer import Trainer
-from utils.helper import Save_Handle, AverageMeter
+import logging
 import os
-import sys
 import time
+
+import numpy as np
 import torch
+from timm.utils import AverageMeter
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
-import logging
-import numpy as np
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from  models.vgg import vgg19
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
 from datasets.crowd import Crowd
 from losses.bay_loss import Bay_Loss
 from losses.post_prob import Post_Prob
+from models.vgg import vgg19
+from utils.helper import Save_Handle
+from utils.trainer import Trainer
 
 
 def train_collate(batch):
@@ -47,18 +50,17 @@ class RegTrainer(Trainer):
                                           collate_fn=(train_collate
                                                       if x == 'train' else default_collate),
                                           batch_size=(args.batch_size
-                                          if x == 'train' else 1),
+                                                      if x == 'train' else 1),
                                           shuffle=(True if x == 'train' else False),
-                                          num_workers=args.num_workers*self.device_count,
+                                          num_workers=args.num_workers * self.device_count,
                                           pin_memory=(True if x == 'train' else False))
                             for x in ['train', 'val']}
-        self.model =vgg19()
-        self.model.to(self.device)
+        self.model = vgg19().to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         self.start_epoch = 0
         if args.resume:
-            suf = args.resume.rsplit('.', 1)[-1]
+            suf = os.path.splitext(args.resume)[-1]
             if suf == 'tar':
                 checkpoint = torch.load(args.resume, self.device)
                 self.model.load_state_dict(checkpoint['model_state_dict'])
@@ -74,6 +76,8 @@ class RegTrainer(Trainer):
                                    args.use_background,
                                    self.device)
         self.criterion = Bay_Loss(args.use_background, self.device)
+        self.log_dir = os.path.join(args.save_dir, 'runs')
+        self.writer = SummaryWriter(self.log_dir)
         self.save_list = Save_Handle(max_num=args.max_model_num)
         self.best_mae = np.inf
         self.best_mse = np.inf
@@ -83,7 +87,7 @@ class RegTrainer(Trainer):
         """training process"""
         args = self.args
         for epoch in range(self.start_epoch, args.max_epoch):
-            logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
+            logging.info('-' * 5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-' * 5)
             self.epoch = epoch
             self.train_eopch()
             if epoch % args.val_epoch == 0 and epoch >= args.val_start:
@@ -97,32 +101,34 @@ class RegTrainer(Trainer):
         self.model.train()  # Set model to training mode
 
         # Iterate over data.
-        for step, (inputs, points, targets, st_sizes) in enumerate(self.dataloaders['train']):
+        for step, (inputs, points, targets, st_sizes) in enumerate(tqdm(self.dataloaders['train'])):
             inputs = inputs.to(self.device)
             st_sizes = st_sizes.to(self.device)
             gd_count = np.array([len(p) for p in points], dtype=np.float32)
             points = [p.to(self.device) for p in points]
             targets = [t.to(self.device) for t in targets]
 
-            with torch.set_grad_enabled(True):
-                outputs = self.model(inputs)
-                prob_list = self.post_prob(points, st_sizes)
-                loss = self.criterion(prob_list, targets, outputs)
+            outputs = self.model(inputs)
+            prob_list = self.post_prob(points, st_sizes)
+            loss = self.criterion(prob_list, targets, outputs)
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
-                N = inputs.size(0)
-                pre_count = torch.sum(outputs.view(N, -1), dim=1).detach().cpu().numpy()
-                res = pre_count - gd_count
-                epoch_loss.update(loss.item(), N)
-                epoch_mse.update(np.mean(res * res), N)
-                epoch_mae.update(np.mean(abs(res)), N)
+            N = inputs.size(0)
+            pre_count = torch.sum(outputs.view(N, -1), dim=1).detach().cpu().numpy()
+            res = pre_count - gd_count
+            epoch_loss.update(loss.item(), N)
+            epoch_mse.update(np.mean(res * res), N)
+            epoch_mae.update(np.mean(abs(res)), N)
 
+        self.writer.add_scalar('train/loss', epoch_loss.avg, self.epoch)
+        self.writer.add_scalar('train/mae', epoch_mae.avg, self.epoch)
+        self.writer.add_scalar('train/mse', np.sqrt(epoch_mse.avg), self.epoch)
         logging.info('Epoch {} Train, Loss: {:.2f}, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
-                     .format(self.epoch, epoch_loss.get_avg(), np.sqrt(epoch_mse.get_avg()), epoch_mae.get_avg(),
-                             time.time()-epoch_start))
+                     .format(self.epoch, epoch_loss.avg, np.sqrt(epoch_mse.avg), epoch_mae.avg,
+                             time.time() - epoch_start))
         model_state_dic = self.model.state_dict()
         save_path = os.path.join(self.save_dir, '{}_ckpt.tar'.format(self.epoch))
         torch.save({
@@ -137,7 +143,7 @@ class RegTrainer(Trainer):
         self.model.eval()  # Set model to evaluate mode
         epoch_res = []
         # Iterate over data.
-        for inputs, count, name in self.dataloaders['val']:
+        for inputs, count, name in tqdm(self.dataloaders['val']):
             inputs = inputs.to(self.device)
             # inputs are images with different sizes
             assert inputs.size(0) == 1, 'the batch size should equal to 1 in validation mode'
@@ -150,7 +156,7 @@ class RegTrainer(Trainer):
         mse = np.sqrt(np.mean(np.square(epoch_res)))
         mae = np.mean(np.abs(epoch_res))
         logging.info('Epoch {} Val, MSE: {:.2f} MAE: {:.2f}, Cost {:.1f} sec'
-                     .format(self.epoch, mse, mae, time.time()-epoch_start))
+                     .format(self.epoch, mse, mae, time.time() - epoch_start))
 
         model_state_dic = self.model.state_dict()
         if (2.0 * mse + mae) < (2.0 * self.best_mse + self.best_mae):
@@ -160,6 +166,3 @@ class RegTrainer(Trainer):
                                                                                  self.best_mae,
                                                                                  self.epoch))
             torch.save(model_state_dic, os.path.join(self.save_dir, 'best_model.pth'))
-
-
-
