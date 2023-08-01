@@ -99,7 +99,7 @@ class RegTrainer(Trainer):
                                    self.device)
         self.criterion = Bay_Loss(args.use_background, self.device)
         self.log_dir = os.path.join(self.save_dir, 'runs')
-        self.writer = SummaryWriter(self.log_dir)
+        # self.writer = SummaryWriter(self.log_dir)
         self.save_list = Save_Handle(max_num=args.max_model_num)
         self.best_mae = np.inf
         self.best_mse = np.inf
