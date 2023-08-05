@@ -42,19 +42,23 @@ This code was tested with python 3.6
 
 2、 Pre-Process Data (resize image and split train/validation)
 
+```bash
+python preprocess_dataset.py --origin_dir PATH_TO_ORIGIN_DATASET --data_dir PATH_TO_DATASET
 ```
-python preprocess_dataset.py --origin_dir <directory of original data> --data_dir <directory of processed data>
+
+```bash
+python preprocess_shanghai.py --origin_dir PATH_TO_ORIGIN_DATASET --data_dir PATH_TO_DATASET --part 'A/B'
 ```
 
 3、 Train model (validate on single GTX Titan X)
 
 ```
-python train.py --data_dir <directory of processed data> --save_dir <directory of log and model>
+python train.py --data_dir <directory of processed data> --save_dir <directory of log and model> --dataset "qnrf/sha/shb" --max_epoch xxx --extra_aug
 ```
 
 4、 Test Model
 ```
-python test.py --data_dir <directory of processed data> --save_dir <directory of log and model>
+python test.py --data_dir <directory of processed data> --save_dir <directory of log and model> --dataset "qnrf/sha/shb"
 ```
 The result is slightly influenced by the random seed, but fixing the random seed (have to set cuda_benchmark to False) will make training time extrodinary long, so sometimes you can get a slightly worse result than the reported result, but most of time you can get a better result than the reported one. If you find this code is useful, please give us a star and cite our paper, have fun.
 
@@ -82,6 +86,32 @@ Goodle Drive [Link](https://drive.google.com/file/d/13bEdshBY-brUvLSwTCOqDlK5QKc
 Baidu Yun [Link](https://pan.baidu.com/s/1YYg-a-sdhBAHZRJzZOU-6Q) extract code: a15u
 
 Goodle Drive [Link](https://drive.google.com/file/d/1woK-bI_JyeY9wZL2pXsWgPzQqhD8Qy0u/view?usp=sharing)
+
+### Reproduction
+
+#### qnrf
+
+paper: mae: 88.7, mse: 154.8
+
+pretrained_models/best_model_sha.pth: mae 86.31, mse 153.04
+
+best_model.pth: mae 89.61100787316968, mse 161.90780984805582
+
+#### Shanghai A
+
+paper: mae: 62.8, mse: 101.8
+
+pretrained_models/best_model_sha.pth: mae 62.68, mse 97.30
+
+best_model.pth: mae 93.59221570570392, mse 132.75362176198067
+
+#### Shanghai B
+
+paper: mae: 7.7, mse: 12.7
+
+pretrained_models/best_model_shb.pth: mae 7.747125667861745, mse 12.956488955530084
+
+best_model.pth: mae 8.858418283583243, mse 14.19788666450213
 
 ### License
 

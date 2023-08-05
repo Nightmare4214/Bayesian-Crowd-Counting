@@ -84,6 +84,9 @@ if __name__ == '__main__':
     model = vgg19()
     device = torch.device('cuda')
     model = model.to(device)
-    model.load_state_dict(torch.load(os.path.join(args.save_dir, 'best_model.pth'), device))
+    model_path = args.save_dir
+    if os.path.isdir(model_path):
+        model_path = os.path.join(model_path, 'best_model.pth')
+    model.load_state_dict(torch.load(model_path, device))
     do_test(model, device, dataloader, args.data_dir, args.save_dir, locate=True)
     

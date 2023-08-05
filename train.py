@@ -49,6 +49,7 @@ def parse_args():
                         help='sigma for likelihood')
     parser.add_argument('--background_ratio', type=float, default=1.0,
                         help='background ratio')
+    parser.add_argument('--extra_aug', default=False, required=False, action='store_true', help='extra_aug')
     args = parser.parse_args()
     if args.dataset.lower() == 'qnrf':
         args.crop_size = 512

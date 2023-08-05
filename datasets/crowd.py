@@ -29,9 +29,9 @@ def cal_innner_area(c_left, c_up, c_right, c_down, bbox):
 class Crowd(data.Dataset):
     def __init__(self, root_path, crop_size,
                  downsample_ratio, is_gray=False,
-                 method='train'):
-
+                 method='train', extra_aug=True):
         self.root_path = root_path
+        self.extra_aug = extra_aug
         self.im_list = sorted(glob(os.path.join(self.root_path, '*.jpg')))
         if method not in ['train', 'val']:
             raise Exception("not implement")
@@ -72,6 +72,18 @@ class Crowd(data.Dataset):
     def train_transform(self, img, keypoints):
         """random crop image patch and find people in it"""
         wd, ht = img.size
+        if self.extra_aug:
+            # assert len(keypoints) > 0
+            if random.random() > 0.88:
+                img = img.convert('L').convert('RGB')
+            re_size = random.random() * 0.5 + 0.75
+            wdd = (int)(wd * re_size)
+            htt = (int)(ht * re_size)
+            if min(wdd, htt) >= self.c_size:
+                wd = wdd
+                ht = htt
+                img = img.resize((wd, ht))
+                keypoints = keypoints * re_size
         st_size = min(wd, ht)
         assert st_size >= self.c_size
         assert len(keypoints) > 0

@@ -4,7 +4,7 @@ from datetime import datetime
 from utils.logger import setlogger
 
 
-include_keys = ['max_epoch', 'crop_size', 'downsample_ratio', 'lr', 'use_background', 'sigma', 'background_ratio', 'batch_size']
+include_keys = ['max_epoch', 'crop_size', 'extra_aug', 'downsample_ratio', 'lr', 'use_background', 'sigma', 'background_ratio', 'batch_size']
 
 def get_run_name_by_args(args, include_keys=None, exclude_keys=None):
     data = args.__dict__
