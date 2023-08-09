@@ -103,7 +103,7 @@ paper: mae: 62.8, mse: 101.8
 
 pretrained_models/best_model_sha.pth: mae 62.68, mse 97.30
 
-best_model.pth: mae 93.59221570570392, mse 132.75362176198067
+best_model.pth: mae 63.7321413061121, mse 100.5095305210611
 
 #### Shanghai B
 
@@ -111,7 +111,7 @@ paper: mae: 7.7, mse: 12.7
 
 pretrained_models/best_model_shb.pth: mae 7.747125667861745, mse 12.956488955530084
 
-best_model.pth: mae 8.858418283583243, mse 14.19788666450213
+best_model.pth: mae 8.229536213452302, mse 13.057458091084367
 
 ### License
 

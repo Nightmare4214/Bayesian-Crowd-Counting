@@ -45,10 +45,11 @@ def get_dataloader_by_args(args):
     else:
         raise NotImplementedError
     return torch.utils.data.DataLoader(datasets, 1, shuffle=False,
-                                       num_workers=1, pin_memory=False)
+                                       num_workers=0, pin_memory=False)
 
 
 def do_test(model, device, dataloader, data_dir, save_dir, locate=True, **kwargs):
+    model.eval()
     epoch_minus = []
     if os.path.isdir(save_dir):
         model_dir = save_dir
@@ -65,6 +66,9 @@ def do_test(model, device, dataloader, data_dir, save_dir, locate=True, **kwargs
             outputs = model(inputs)
             temp_minu = count[0].item() - torch.sum(outputs).item()
             # print(name, temp_minu, count[0].item(), torch.sum(outputs).item())
+            del inputs
+            del outputs
+            torch.cuda.empty_cache()
             epoch_minus.append(temp_minu)
 
     epoch_minus = np.array(epoch_minus)

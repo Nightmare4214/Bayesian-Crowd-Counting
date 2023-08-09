@@ -75,7 +75,7 @@ class RegTrainer(Trainer):
                                           batch_size=(args.batch_size
                                                       if x == 'train' else 1),
                                           shuffle=(True if x == 'train' else False),
-                                          num_workers=1,
+                                          num_workers=1 if x == 'train' else 0,
                                           pin_memory=(True if x == 'train' else False))
                             for x in ['train', 'val']}
         self.model = vgg19().to(self.device)
@@ -178,6 +178,9 @@ class RegTrainer(Trainer):
                 assert inputs.size(0) == 1, 'the batch size should equal to 1 in validation mode'
                 outputs = self.model(inputs)
                 res = count[0].item() - torch.sum(outputs).item()
+                del inputs
+                del outputs
+                torch.cuda.empty_cache()
                 epoch_res.append(res)
 
         epoch_res = np.array(epoch_res)
