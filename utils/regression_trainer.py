@@ -36,15 +36,6 @@ class RegTrainer(Trainer):
         """initial the datasets, model, loss and optimizer"""
         args = self.args
         # os.environ["WANDB_MODE"] = "offline"
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project="Bayesian-Counting",
-            name = os.path.basename(self.args.save_dir),
-            # track hyperparameters and run metadata
-            config=args,
-            resume=True if args.resume else None,
-            # sync_tensorboard=True
-        )
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
             self.device_count = torch.cuda.device_count()
@@ -82,14 +73,23 @@ class RegTrainer(Trainer):
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         self.start_epoch = 0
+        self.best_mae = np.inf
+        self.best_mse = np.inf
+        self.best_count = 0
+        self.wandb_id = None
         if args.resume:
             suf = os.path.splitext(args.resume)[-1]
-            if suf == 'tar':
+            if suf == '.tar':
                 checkpoint = torch.load(args.resume, self.device)
                 self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 self.start_epoch = checkpoint['epoch'] + 1
-            elif suf == 'pth':
+                self.best_mae = checkpoint['best_mae']
+                self.best_mse = checkpoint['best_mse']
+                self.best_count = checkpoint['best_count']
+                if 'wandb_id' in checkpoint:
+                    self.wandb_id = checkpoint['wandb_id']
+            elif suf == '.pth':
                 self.model.load_state_dict(torch.load(args.resume, self.device))
 
         self.post_prob = Post_Prob(args.sigma,
@@ -102,9 +102,17 @@ class RegTrainer(Trainer):
         self.log_dir = os.path.join(self.save_dir, 'runs')
         # self.writer = SummaryWriter(self.log_dir)
         self.save_list = Save_Handle(max_num=args.max_model_num)
-        self.best_mae = np.inf
-        self.best_mse = np.inf
-        self.best_count = 0
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project="Bayesian-Counting",
+            id = self.wandb_id,
+            name = os.path.basename(self.args.save_dir),
+            # track hyperparameters and run metadata
+            config=args,
+            resume=True if args.resume else None,
+            # sync_tensorboard=True
+        )
+        self.wandb_id = wandb.run.id
 
     def train(self):
         """training process"""
@@ -162,7 +170,11 @@ class RegTrainer(Trainer):
         torch.save({
             'epoch': self.epoch,
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'model_state_dict': model_state_dic
+            'model_state_dict': model_state_dic,
+            'best_mae': self.best_mae,
+            'best_mse': self.best_mse,
+            'best_count': self.best_count,
+            'wandb_id': self.wandb_id
         }, save_path)
         self.save_list.append(save_path)  # control the number of saved models
 
