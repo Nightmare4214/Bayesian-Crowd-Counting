@@ -50,6 +50,9 @@ def parse_args():
     parser.add_argument('--background_ratio', type=float, default=1.0,
                         help='background ratio')
     parser.add_argument('--extra_aug', default=False, required=False, action='store_true', help='extra_aug')
+    parser.add_argument('--randomless', default=False, required=False, action='store_true', help='randomless')
+    parser.add_argument('--seed', type=int, default=42, help='random seed')
+
     args = parser.parse_args()
     if args.dataset.lower() == 'qnrf':
         args.crop_size = 512
@@ -67,7 +70,7 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.benchmark = True
     os.environ['CUDA_VISIBLE_DEVICES'] = args.device.strip()  # set vis gpu
     trainer = RegTrainer(args)
     trainer.setup()

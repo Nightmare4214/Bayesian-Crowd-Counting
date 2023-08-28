@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import time
 
 import numpy as np
@@ -19,6 +20,7 @@ from losses.post_prob import Post_Prob
 from models.vgg import vgg19
 from test import do_test, get_dataloader_by_args
 from utils.helper import Save_Handle
+from utils.pytorch_utils import seed_worker, setup_seed
 from utils.trainer import Trainer
 
 
@@ -35,6 +37,14 @@ class RegTrainer(Trainer):
     def setup(self):
         """initial the datasets, model, loss and optimizer"""
         args = self.args
+        if args.randomless:
+            seed = args.seed
+            g = torch.Generator()
+            g.manual_seed(seed)
+            setup_seed(seed)
+        else:
+            torch.backends.cudnn.benchmark = True
+
         # os.environ["WANDB_MODE"] = "offline"
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -67,7 +77,8 @@ class RegTrainer(Trainer):
                                                       if x == 'train' else 1),
                                           shuffle=(True if x == 'train' else False),
                                           num_workers=1 if x == 'train' else 0,
-                                          pin_memory=(True if x == 'train' else False))
+                                          pin_memory=(True if x == 'train' else False),
+                                          worker_init_fn=seed_worker if args.randomless else None, generator=g if args.randomless else None)
                             for x in ['train', 'val']}
         self.model = vgg19().to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -89,6 +100,10 @@ class RegTrainer(Trainer):
                 self.best_count = checkpoint['best_count']
                 if 'wandb_id' in checkpoint:
                     self.wandb_id = checkpoint['wandb_id']
+                if args.randomless:
+                    random.setstate(checkpoint['random_state'])
+                    np.random.set_state(checkpoint['np_random_state'])
+                    torch.random.set_rng_state(checkpoint['torch_random_state'].cpu())
             elif suf == '.pth':
                 self.model.load_state_dict(torch.load(args.resume, self.device))
 
@@ -174,7 +189,10 @@ class RegTrainer(Trainer):
             'best_mae': self.best_mae,
             'best_mse': self.best_mse,
             'best_count': self.best_count,
-            'wandb_id': self.wandb_id
+            'wandb_id': self.wandb_id,
+            'random_state': random.getstate(),
+            'np_random_state': np.random.get_state(),
+            'torch_random_state': torch.random.get_rng_state()
         }, save_path)
         self.save_list.append(save_path)  # control the number of saved models
 
